@@ -1,0 +1,45 @@
+# ComfyUI portable contents — do not commit
+python_embeded/
+ComfyUI/
+models/
+output/
+input/
+temp/
+user/
+custom_nodes/
+*.7z
+*.zip
+
+# Model files
+*.safetensors
+*.ckpt
+*.pt
+*.bin
+*.gguf
+*.whl
+
+# Config with personal paths
+extra_model_paths.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+comfyui.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temp
+*.tmp
+*.bak

@@ -1,0 +1,16 @@
+# extra_model_paths.yaml
+# Copy this file to extra_model_paths.yaml and edit the paths below
+# to point at your model directories.
+
+comfyui:
+    checkpoints: /path/to/your/models/checkpoints
+    lora: /path/to/your/models/lora
+    vae: /path/to/your/models/vae
+    embeddings: /path/to/your/models/embeddings
+    diffusion_models: /path/to/your/models/diffusion_models
+    text_encoders: /path/to/your/models/text_encoders
+    clip: /path/to/your/models/text_encoders
+    loras: /path/to/your/models/lora
+
+# Windows path example:
+# checkpoints: F:\ai\models\checkpoints
