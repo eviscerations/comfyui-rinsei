@@ -57,29 +57,31 @@ Note: Q3_K_M is the confirmed inflection point on 12GB — it provides enough fr
 
 ---
 
-## Vega / GCN 5 — Vulkan Pathway
+## Vega / GCN 5 — ROCm Status Update (June 2026)
 
-Vega architecture (gfx900, gfx906) is a different research track from RDNA2. ROCm 5.7 was the last series with full GCN 5.1 support, and the ROCm 6.x nightly wheels used by this repository dropped Vega. The `HSA_OVERRIDE_GFX_VERSION=10.3.0` trick may partially work but is not confirmed for ComfyUI inference on these cards.
+**Status changed:** gfx900 is now officially listed as a supported architecture in AMD's PyTorch 2.9 variant wheel system for ROCm 6.3 and 6.4. Full AMD-confirmed supported GPU list: gfx1030, gfx1100, gfx1101, gfx1102, gfx1200, gfx1201, **gfx900**, **gfx906**, gfx908, gfx90a, gfx942.
 
-However, Vega has strong Vulkan 1.3 support. This opens an alternative pathway.
-
-| Card | Architecture | gfx | VRAM | Pathway |
+| Card | Architecture | gfx | VRAM | Status |
 |---|---|---|---|---|
-| Vega 56 | GCN 5 | gfx900 | 8GB HBM2 | Vulkan inference (llama.cpp, Ollama) |
-| Vega 64 | GCN 5 | gfx900 | 8GB HBM2 | Vulkan inference |
-| Radeon VII | GCN 5.1 | gfx906 | 16GB HBM2 | Vulkan inference — 16GB HBM2 bandwidth is significant |
+| Vega 56 | GCN 5 | gfx900 | 8GB HBM2 | ROCm PyTorch 2.9 confirmed (Linux); Windows unconfirmed |
+| Vega 64 | GCN 5 | gfx900 | 8GB HBM2 | Same as Vega 56 |
+| Radeon VII | GCN 5.1 | gfx906 | 16GB HBM2 | ROCm PyTorch 2.9 confirmed (Linux); 16GB HBM2 significant |
 
-**What Vulkan enables on Vega:**
+**Linux path (confirmed):**
 
-LLM inference via llama.cpp's Vulkan backend (`-DGGML_VULKAN=ON`) runs on any GPU with Vulkan 1.3 support, including Vega. Ollama uses llama.cpp internally and can be configured to use the Vulkan backend with `OLLAMA_GPU_DRIVER=vulkan`. This is a clean path to local LLM inference on Vega hardware without any ROCm dependency.
+Install PyTorch 2.9 via the AMD variant wheel system with ROCm 6.3 or 6.4 installed. The AMD provider plugin detects gfx900 automatically. For ROCm 7.x nightly: `pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/rocm7.0` — gfx900 kernels exist but show instability (TensileLibrary crash, PyTorch issue #179865, April 2026).
 
-ComfyUI image and video generation is harder — it uses PyTorch which requires ROCm (or CUDA) for GPU compute. There is no Vulkan backend for PyTorch. Options being researched:
+**Windows path (unconfirmed — active research):**
 
-1. **ROCm 5.7 with older wheel builds** — limited to older models, increasing incompatibility with current workflows
-2. **DirectML via onnxruntime** — experimental, significant workflow changes required
-3. **HSA_OVERRIDE trick with ROCm 7.x nightlies** — unconfirmed on gfx900, may work partially
+The nightly index at `rocm.nightlies.amd.com` may include gfx900 kernels. `HSA_OVERRIDE_GFX_VERSION=9.0.0` is the expected env var (gfx900 presents as itself, no spoofing required unlike gfx1031). No working Windows stack confirmed yet. The advanced-lvl-up gfx800/gfx900 Tensile fix repo has been updated with ComfyUI GGUF and 10-step workflow support for gfx900.
 
-The Radeon VII (16GB HBM2) is an interesting outlier. If any Vega card can be made to work with modern ROCm via the override trick, 16GB of HBM2 bandwidth would be a significant compute asset. It warrants dedicated testing.
+**Vulkan (still confirmed working regardless of ROCm status):**
+
+LLM inference via llama.cpp Vulkan backend and Ollama on Vega is a confirmed working path without any ROCm dependency. Quantized GGUF models (Q4, Q3, Q2) fit within the 8GB HBM2 budget. whisper.cpp Vulkan backend also confirmed on Vega.
+
+**Wan 2.2 video LoRA training — proof of concept on gfx803 (RX470):**
+
+The advanced-lvl-up contributor demonstrated Wan 2.2 5B LoRA training on an RX470 (gfx803 — older than Vega) with 6GB peak VRAM using a custom training loop bypassing kohya_ss entirely: PEFT + diffusers, custom Rose optimizer, manual DataLoader, AMP GradScaler, gradient accumulation with optimizer and attention activation offloading. 50 video samples, 500 steps, 1280×704 121-frame output. Framework is ~3000 lines, not yet publicly released. See github.com/lshqqytiger/ZLUDA/issues/138 for details.
 
 ---
 

@@ -43,21 +43,37 @@ People who already own AMD RDNA2, RDNA1, or Vega hardware are increasingly unabl
 
 **Conclusion:** ZLUDA is not a viable path for ComfyUI video generation on gfx1031 at this time.
 
-### ZLUDA on Vega 56 (gfx900)
+### ZLUDA on Vega 56 (gfx900) — LoRA Training
 
-**Status:** Dead end for training — CUTLASS incompatibility, hard freeze.
+**Status:** Partially progressed, hard freeze on kernel compilation.
 
-During LoRA training experiments on Vega 56, ZLUDA was tested as a path to GPU-accelerated training via the CUDA backend. The result was a hard freeze identical to the gfx1031 CUTLASS failure. ZLUDA does not provide a viable training path on gfx900.
+LoRA training via ZLUDA on gfx900 was attempted with the following stack: HIP SDK 5.7.1, lshqqytiger ZLUDA fork (windows-rocm5-amd64), advanced-lvl-up gfx900 Tensile fix, PyTorch 2.3.1+cu118, kohya_ss v25.2.1. GPU detection confirmed working via PyTorch (`torch.cuda.is_available()` = True, device name = Radeon RX Vega [ZLUDA]).
 
-### ROCm on Vega 56 (gfx900) for ComfyUI
+**Failure 1 — VAE encoding:** Training crashes on first batch with `CUBLAS_STATUS_NOT_SUPPORTED` calling `cublasSgemm`. Single-precision float32 GEMM is not implemented for gfx900 in the current Tensile library. Workaround: pre-encode all training images to `.npz` on CPU, bypass VAE with `cache_latents_to_disk=true`.
 
-**Status:** Not viable with current ROCm 6.x / 7.x wheels.
+**Failure 2 — U-Net silent hang:** With CPU-cached latents, training proceeds further but hangs at step 0 with no error, no GPU activity. Root cause per lshqqytiger: kohya_ss does not preload ZLUDA DLLs (unlike SD.Next/A1111-amdgpu which do so silently). Fix: replace PyTorch's `cublas64_11.dll` in `site-packages/torch/lib/` with the `cublas.dll` shipped in the ZLUDA distribution. Setting `ZLUDA_COMGR_LOG_LEVEL=1` confirms the hang is actually kernel compilation in progress — ZLUDA compiles GPU kernels JIT and this can take 10-20 minutes.
 
-ROCm 5.7 was the last release with full GCN 5.1 (gfx906) support, and GCN 5 (gfx900) support has been progressively degraded. The ROCm 7.x nightly wheels used by this repository (required for PyTorch 2.10.x) do not support gfx900 for GPU compute in ComfyUI. The `HSA_OVERRIDE_GFX_VERSION=10.3.0` trick that enables gfx1031 to run as gfx1030 does not produce working results on gfx900 for inference workloads — the override works because gfx1031 and gfx1030 are the same RDNA2 ISA. gfx900 is GCN5 and the ISA difference is too large.
+**Failure 3 — Hard freeze during kernel compilation:** With the DLL replaced, kernel compilation begins and is confirmed active via log output. During compilation, a fatal error appears: `FATAL: kernel fmha_cutlassF_f32_aligned_64x64_rf_sm80 is for sm80-sm100, but was built for sm37`. This is the same CUTLASS Flash Attention kernel mismatch documented on gfx1031 — kernels compiled for sm80 (NVIDIA Ampere) cannot run on gfx900 (equivalent sm37 compute level). The system hard locked requiring a power cycle.
 
-**What partially works on gfx900:** ROCm 5.3–5.7 pinned builds may enable some older model inference. This is unexplored territory and not documented here.
+**Conclusion:** ZLUDA LoRA training on gfx900 reaches further than gfx1031 (gets past GPU detection and into kernel compilation) but ultimately hits the same CUTLASS wall. The DLL replacement fix is required and documented. The sm80/sm37 mismatch is the hard blocker.
 
-**Conclusion:** ComfyUI image and video generation on Vega via ROCm is not currently viable. Vulkan is the viable inference pathway for Vega.
+**Issue filed:** github.com/lshqqytiger/ZLUDA/issues/138
+
+### ROCm on Vega 56 (gfx900) — Status Update (June 2026)
+
+**Status:** Officially supported on Linux (PyTorch 2.9 / ROCm 6.3-6.4). Windows unconfirmed.
+
+gfx900 is now listed as an officially supported architecture in AMD's PyTorch 2.9 variant wheel system for ROCm 6.3 and 6.4. The full supported GPU list per AMD's documentation: gfx1030, gfx1100, gfx1101, gfx1102, gfx1200, gfx1201, gfx900, gfx906, gfx908, gfx90a, gfx942.
+
+This is a significant change from the previous status. gfx900 was dropped from ROCm 6.x official support but has been re-added to the PyTorch wheel ecosystem via TheRock.
+
+**Linux path:** Install PyTorch 2.9 via the variant wheel system with ROCm 6.3 or 6.4 installed. The AMD provider plugin detects gfx900 automatically. For ROCm 7.0+, use the nightly index at `download.pytorch.org/whl/nightly/rocm7.0` — gfx900 nightly wheels exist but show instability (TensileLibrary.dat crash reported April 2026, PyTorch issue #179865).
+
+**Windows path:** Unconfirmed. The nightly wheels at `rocm.nightlies.amd.com` may include gfx900 kernels but no clean Windows stack has been verified. `HSA_OVERRIDE_GFX_VERSION=9.0.0` is the expected override (gfx900 presents as itself, no spoofing needed). This is an active research target.
+
+**TheRock build system:** gfx900 is functional in TheRock but noted as needing fixes (TheRock issue #2588). The advanced-lvl-up gfx800/gfx900 Tensile fix repo has been updated to include ComfyUI GGUF support and 10-step workflow examples for gfx900.
+
+**Wan 2.2 video LoRA training on legacy AMD hardware:** The advanced-lvl-up contributor demonstrated Wan 2.2 5B LoRA training running on an RX470 (gfx803 — older than gfx900) with peak 6GB VRAM using a custom training loop: PEFT + diffusers, a custom Rose optimizer, manual DataLoader preparation, AMP GradScaler, gradient accumulation with optimizer and attention activation offloading. 50 video samples at 640×480 49 frames, 500 steps, output at 1280×704 121 frames. This bypasses kohya_ss entirely and avoids the Tensile dependency. The training framework code is approximately 3000 lines including helper functions and is not yet publicly released, but the contributor has offered to complete it on request.
 
 ### kohya_ss LoRA Training on Vega 56
 
@@ -152,9 +168,11 @@ Is there a viable path to running diffusion model inference on Vega via a Vulkan
 | Ollama + Vulkan LLM inference | gfx900 | ✅ Works (not yet characterized here) |
 | whisper.cpp Vulkan transcription | gfx900 | ✅ Works via Vulkan backend |
 | ZLUDA ComfyUI inference | gfx1031 | ❌ CUTLASS Flash Attn freeze |
-| ZLUDA LoRA training | gfx900 | ❌ CUTLASS Flash Attn freeze |
-| ROCm 7.x ComfyUI inference | gfx900 | ❌ ISA mismatch, not viable |
-| fp16 GPU LoRA training | gfx900 | ❌ Silent hang |
+| ZLUDA LoRA training (kohya_ss) | gfx900 | ❌ sm80 CUTLASS kernel + hard freeze |
+| ROCm 7.x nightly ComfyUI (Windows) | gfx900 | ❓ Unconfirmed — active research |
+| PyTorch 2.9 + ROCm 6.3/6.4 (Linux) | gfx900 | ✅ Officially supported |
+| fp16 GPU LoRA training (kohya_ss) | gfx900 | ❌ Silent hang without DLL fix |
+| Wan 2.2 5B LoRA training (custom loop) | gfx803 (RX470) | ✅ Confirmed — 6GB VRAM peak |
 | fp8 text encoders | gfx1031 | ❌ comfy_kitchen dependency crash |
 | SageAttention | gfx1031 | ❌ CUDA/Triton only |
 | ComfyUI inference via DirectML | any | ❌ Not applicable to PyTorch compute path |
