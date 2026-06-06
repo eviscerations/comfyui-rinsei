@@ -1,45 +1,42 @@
-# ComfyUI portable contents — do not commit
-python_embeded/
-ComfyUI/
+# ComfyUI runtime directories - never commit these
+web/
+user/
 models/
+custom_nodes/
 output/
 input/
 temp/
-user/
-custom_nodes/
-*.7z
-*.zip
+python_embeded/
+venv/
+
+# ComfyUI generated files
+*.log
+*.db
+*.db-shm
+*.db-wal
+__pycache__/
+*.pyc
+*.pyo
 
 # Model files
 *.safetensors
 *.ckpt
 *.pt
-*.bin
+*.pth
 *.gguf
-*.whl
-
-# Config with personal paths
-extra_model_paths.yaml
-
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.Python
-*.egg-info/
-dist/
-build/
-
-# Logs
-*.log
-comfyui.log
+*.bin
 
 # OS
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Temp
-*.tmp
-*.bak
+# Node / build artifacts (frontend work)
+node_modules/
+dist/
+.vite/
+*.local
+
+# Personal/sensitive
+*.env
+.env.*
